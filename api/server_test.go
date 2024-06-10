@@ -1,35 +1,26 @@
-package main
+package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
-
-func mustJSON(t *testing.T, v interface{}) string {
-	t.Helper()
-	out, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(out)
-}
-
-var api = apiConfig{}
 
 func TestHealthHandler(t *testing.T) {
 	t.Run("is ok", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodGet, "/v1/healthz", nil)
-		response := httptest.NewRecorder()
+		mockDbApi := new(MockedDbApi)
+		testApi := apiConfig{DB: mockDbApi}
+		request, err := http.NewRequest(http.MethodGet, "/v1/healthz", nil)
+		require.NoError(t, err)
+		rw := httptest.NewRecorder()
 
-		api.handlerHealth(response, request)
+		testApi.handlerHealth(rw, request)
 
-		if response.Code != 200 {
-			t.Errorf("want 200, got %d", response.Code)
-		}
+		require.Equal(t, http.StatusOK, rw.Code)
 		expected := mustJSON(t, map[string]string{"status": "ok"})
-		got := response.Body.String()
+		got := rw.Body.String()
 		if expected != got {
 			t.Errorf("want %s, got %s", expected, got)
 		}
@@ -38,10 +29,12 @@ func TestHealthHandler(t *testing.T) {
 
 func TestErrHandler(t *testing.T) {
 	t.Run("err format", func(t *testing.T) {
+		mockDbApi := new(MockedDbApi)
+		testApi := apiConfig{DB: mockDbApi}
 		req, _ := http.NewRequest(http.MethodGet, "/v1/err", nil)
 		resp := httptest.NewRecorder()
 
-		api.handlerErr(resp, req)
+		testApi.handlerErr(resp, req)
 
 		if resp.Code != 500 {
 			t.Errorf("want 500, got %d", resp.Code)

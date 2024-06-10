@@ -21,6 +21,6 @@
 go.work
 go.work.sum
 
-postgres
+.postgres
 .env
 out
