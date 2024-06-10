@@ -17,6 +17,7 @@ import (
 
 type DbApi interface {
 	CreateUser(context.Context, database.CreateUserParams) (database.User, error)
+	GetUserByApiKey(context.Context, string) (database.User, error)
 }
 
 type apiConfig struct {
@@ -74,6 +75,7 @@ func Run() {
 	mux.HandleFunc("GET /v1/err", cfg.handlerErr)
 
 	mux.HandleFunc("POST /v1/users", cfg.handlerCreateUser)
+	mux.HandleFunc("GET /v1/users", cfg.handlerGetUser)
 
 	stack := middleware.CreateStack(
 		middleware.Logging,

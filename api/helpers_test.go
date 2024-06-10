@@ -26,3 +26,8 @@ func (m *MockedDbApi) CreateUser(ctx context.Context, arg database.CreateUserPar
 	args := m.Called(ctx, arg)
 	return args.Get(0).(database.User), args.Error(1)
 }
+
+func (m *MockedDbApi) GetUserByApiKey(ctx context.Context, apiKey string) (database.User, error) {
+	args := m.Called(ctx, apiKey)
+	return args.Get(0).(database.User), args.Error(1)
+}

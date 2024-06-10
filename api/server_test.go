@@ -12,11 +12,11 @@ func TestHealthHandler(t *testing.T) {
 	t.Run("is ok", func(t *testing.T) {
 		mockDbApi := new(MockedDbApi)
 		testApi := apiConfig{DB: mockDbApi}
-		request, err := http.NewRequest(http.MethodGet, "/v1/healthz", nil)
+		req, err := http.NewRequest(http.MethodGet, "/v1/healthz", nil)
 		require.NoError(t, err)
 		rw := httptest.NewRecorder()
 
-		testApi.handlerHealth(rw, request)
+		testApi.handlerHealth(rw, req)
 
 		require.Equal(t, http.StatusOK, rw.Code)
 		expected := mustJSON(t, map[string]string{"status": "ok"})

@@ -1,9 +1,12 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +18,7 @@ type response struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Name      string    `json:"name"`
+	ApiKey    string    `json:"api_key"`
 }
 
 func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +40,7 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("user creation error: %v\n", err)
 		respondWithError(w, 500, "error creating user")
+		return
 	}
 
 	resp := response{
@@ -43,6 +48,36 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Name:      user.Name,
+		ApiKey:    user.ApiKey,
 	}
 	respondWithJSON(w, 201, resp)
+}
+
+func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
+	apiKey, found := strings.CutPrefix(r.Header.Get("Authorization"), "ApiKey ")
+	if !found {
+		respondWithError(w, 401, "no authorization header")
+	}
+
+	user, err := a.DB.GetUserByApiKey(r.Context(), apiKey)
+	if err != nil {
+		log.Printf("user fetching error: %v\n", err)
+		msg := "something went wrong"
+		code := 500
+		if errors.Is(err, sql.ErrNoRows) {
+			msg = "user not found"
+			code = 404
+		}
+		respondWithError(w, code, msg)
+		return
+	}
+
+	resp := response{
+		Id:        user.ID.String(),
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Name:      user.Name,
+		ApiKey:    user.ApiKey,
+	}
+	respondWithJSON(w, 200, resp)
 }
