@@ -19,6 +19,7 @@ type DbApi interface {
 	CreateUser(context.Context, database.CreateUserParams) (database.User, error)
 	GetUserByApiKey(context.Context, string) (database.User, error)
 	CreateFeed(context.Context, database.CreateFeedParams) (database.Feed, error)
+	ListFeeds(context.Context) ([]database.Feed, error)
 }
 
 type apiConfig struct {
@@ -75,6 +76,7 @@ func Run() {
 	mux.HandleFunc("GET /v1/healthz", cfg.handlerHealth)
 	mux.HandleFunc("GET /v1/err", cfg.handlerErr)
 	mux.HandleFunc("POST /v1/users", cfg.handlerCreateUser)
+	mux.HandleFunc("GET /v1/feeds", cfg.handlerListFeeds)
 
 	protectedMux := http.NewServeMux()
 	protectedMux.HandleFunc("GET /users", cfg.handlerGetUser)

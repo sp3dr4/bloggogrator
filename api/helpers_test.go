@@ -36,3 +36,8 @@ func (m *MockedDbApi) CreateFeed(ctx context.Context, arg database.CreateFeedPar
 	args := m.Called(ctx, arg)
 	return args.Get(0).(database.Feed), args.Error(1)
 }
+
+func (m *MockedDbApi) ListFeeds(ctx context.Context) ([]database.Feed, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]database.Feed), args.Error(1)
+}

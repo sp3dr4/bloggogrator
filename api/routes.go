@@ -95,6 +95,27 @@ func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 200, resp)
 }
 
+func (a *apiConfig) handlerListFeeds(w http.ResponseWriter, r *http.Request) {
+	feeds, err := a.DB.ListFeeds(r.Context())
+	if err != nil {
+		log.Printf("feeds listing error: %v\n", err)
+		respondWithError(w, 500, "error listing feeds")
+		return
+	}
+	respFeeds := make([]feedResponse, 0, len(feeds))
+	for _, o := range feeds {
+		respFeeds = append(respFeeds, feedResponse{
+			Id:        o.ID.String(),
+			CreatedAt: o.CreatedAt,
+			UpdatedAt: o.UpdatedAt,
+			Name:      o.Name,
+			Url:       o.Url,
+			UserId:    o.UserID.String(),
+		})
+	}
+	respondWithJSON(w, 200, respFeeds)
+}
+
 func (a *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Context().Value(middleware.AuthApiKey).(string)
 	user, err := getUser(w, r, a.DB, apiKey)
