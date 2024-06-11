@@ -18,6 +18,7 @@ import (
 type DbApi interface {
 	CreateUser(context.Context, database.CreateUserParams) (database.User, error)
 	GetUserByApiKey(context.Context, string) (database.User, error)
+	CreateFeed(context.Context, database.CreateFeedParams) (database.Feed, error)
 }
 
 type apiConfig struct {
@@ -73,17 +74,17 @@ func Run() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/healthz", cfg.handlerHealth)
 	mux.HandleFunc("GET /v1/err", cfg.handlerErr)
-
 	mux.HandleFunc("POST /v1/users", cfg.handlerCreateUser)
-	mux.HandleFunc("GET /v1/users", cfg.handlerGetUser)
 
-	stack := middleware.CreateStack(
-		middleware.Logging,
-	)
+	protectedMux := http.NewServeMux()
+	protectedMux.HandleFunc("GET /users", cfg.handlerGetUser)
+	protectedMux.HandleFunc("POST /feeds", cfg.handlerCreateFeed)
+	protectedStack := middleware.CreateStack(middleware.Logging, middleware.Auth)(protectedMux)
+	mux.Handle("/v1/", http.StripPrefix("/v1", protectedStack))
 
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%s", os.Getenv("PORT")),
-		Handler: stack(mux),
+		Handler: middleware.CreateStack(middleware.Logging)(mux),
 	}
 	log.Fatal(server.ListenAndServe())
 }

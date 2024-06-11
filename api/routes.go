@@ -6,19 +6,28 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sp3dr4/bloggogrator/api/middleware"
 	"github.com/sp3dr4/bloggogrator/internal/database"
 )
 
-type response struct {
+type userResponse struct {
 	Id        string    `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Name      string    `json:"name"`
 	ApiKey    string    `json:"api_key"`
+}
+
+type feedResponse struct {
+	Id        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Name      string    `json:"name"`
+	Url       string    `json:"url"`
+	UserId    string    `json:"user_id"`
 }
 
 func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +52,7 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := response{
+	resp := userResponse{
 		Id:        user.ID.String(),
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
@@ -53,13 +62,8 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, resp)
 }
 
-func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
-	apiKey, found := strings.CutPrefix(r.Header.Get("Authorization"), "ApiKey ")
-	if !found {
-		respondWithError(w, 401, "no authorization header")
-	}
-
-	user, err := a.DB.GetUserByApiKey(r.Context(), apiKey)
+func getUser(w http.ResponseWriter, r *http.Request, db DbApi, apiKey string) (*database.User, error) {
+	user, err := db.GetUserByApiKey(r.Context(), apiKey)
 	if err != nil {
 		log.Printf("user fetching error: %v\n", err)
 		msg := "something went wrong"
@@ -69,10 +73,19 @@ func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 			code = 404
 		}
 		respondWithError(w, code, msg)
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value(middleware.AuthApiKey).(string)
+	user, err := getUser(w, r, a.DB, apiKey)
+	if err != nil {
 		return
 	}
 
-	resp := response{
+	resp := userResponse{
 		Id:        user.ID.String(),
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
@@ -80,4 +93,46 @@ func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 		ApiKey:    user.ApiKey,
 	}
 	respondWithJSON(w, 200, resp)
+}
+
+func (a *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Context().Value(middleware.AuthApiKey).(string)
+	user, err := getUser(w, r, a.DB, apiKey)
+	if err != nil {
+		return
+	}
+
+	var request struct {
+		Name string `json:"name"`
+		Url  string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondWithError(w, 400, "error decoding request body")
+		return
+	}
+
+	createParams := database.CreateFeedParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Name:      request.Name,
+		Url:       request.Url,
+		UserID:    user.ID,
+	}
+	feed, err := a.DB.CreateFeed(r.Context(), createParams)
+	if err != nil {
+		log.Printf("feed creation error: %v\n", err)
+		respondWithError(w, 500, "error creating feed")
+		return
+	}
+
+	resp := feedResponse{
+		Id:        feed.ID.String(),
+		CreatedAt: feed.CreatedAt,
+		UpdatedAt: feed.UpdatedAt,
+		Name:      feed.Name,
+		Url:       feed.Url,
+		UserId:    feed.UserID.String(),
+	}
+	respondWithJSON(w, 201, resp)
 }

@@ -31,3 +31,8 @@ func (m *MockedDbApi) GetUserByApiKey(ctx context.Context, apiKey string) (datab
 	args := m.Called(ctx, apiKey)
 	return args.Get(0).(database.User), args.Error(1)
 }
+
+func (m *MockedDbApi) CreateFeed(ctx context.Context, arg database.CreateFeedParams) (database.Feed, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(database.Feed), args.Error(1)
+}

@@ -7,7 +7,5 @@ ALTER TABLE users
 -- +goose StatementEnd
 
 -- +goose Down
--- +goose StatementBegin
 ALTER TABLE users
     DROP COLUMN api_key;
--- +goose StatementEnd
