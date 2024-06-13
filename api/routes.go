@@ -30,6 +30,13 @@ type feedResponse struct {
 	UserId    string    `json:"user_id"`
 }
 
+type followResponse struct {
+	Id        string    `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	FeedId    string    `json:"feed_id"`
+	UserId    string    `json:"user_id"`
+}
+
 func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Name string `json:"name"`
@@ -62,28 +69,8 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, 201, resp)
 }
 
-func getUser(w http.ResponseWriter, r *http.Request, db DbApi, apiKey string) (*database.User, error) {
-	user, err := db.GetUserByApiKey(r.Context(), apiKey)
-	if err != nil {
-		log.Printf("user fetching error: %v\n", err)
-		msg := "something went wrong"
-		code := 500
-		if errors.Is(err, sql.ErrNoRows) {
-			msg = "user not found"
-			code = 404
-		}
-		respondWithError(w, code, msg)
-		return nil, err
-	}
-	return &user, nil
-}
-
 func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value(middleware.AuthApiKey).(string)
-	user, err := getUser(w, r, a.DB, apiKey)
-	if err != nil {
-		return
-	}
+	user := r.Context().Value(middleware.AuthUser).(database.User)
 
 	resp := userResponse{
 		Id:        user.ID.String(),
@@ -117,11 +104,7 @@ func (a *apiConfig) handlerListFeeds(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Context().Value(middleware.AuthApiKey).(string)
-	user, err := getUser(w, r, a.DB, apiKey)
-	if err != nil {
-		return
-	}
+	user := r.Context().Value(middleware.AuthUser).(database.User)
 
 	var request struct {
 		Name string `json:"name"`
@@ -147,7 +130,20 @@ func (a *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := feedResponse{
+	createFollowParams := database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feed.ID,
+	}
+	follow, err := a.DB.CreateFeedFollow(r.Context(), createFollowParams)
+	if err != nil {
+		log.Printf("follow creation error: %v\n", err)
+		respondWithError(w, 500, "error creating feed follow")
+		return
+	}
+
+	feedResp := feedResponse{
 		Id:        feed.ID.String(),
 		CreatedAt: feed.CreatedAt,
 		UpdatedAt: feed.UpdatedAt,
@@ -155,5 +151,109 @@ func (a *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request) {
 		Url:       feed.Url,
 		UserId:    feed.UserID.String(),
 	}
+	followResp := followResponse{
+		Id:        follow.ID.String(),
+		CreatedAt: follow.CreatedAt,
+		UserId:    follow.UserID.String(),
+		FeedId:    follow.FeedID.String(),
+	}
+	resp := struct {
+		Feed       feedResponse   `json:"feed"`
+		FeedFollow followResponse `json:"feed_follow"`
+	}{
+		Feed:       feedResp,
+		FeedFollow: followResp,
+	}
 	respondWithJSON(w, 201, resp)
+}
+
+func (a *apiConfig) handlerCreateFeedFollow(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(middleware.AuthUser).(database.User)
+
+	var request struct {
+		FeedId string `json:"feed_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondWithError(w, 400, "error decoding request body")
+		return
+	}
+
+	feed_uuid, err := uuid.Parse(request.FeedId)
+	if err != nil {
+		respondWithError(w, 400, "invalid feed id")
+		return
+	}
+	feed, err := a.DB.GetFeed(r.Context(), feed_uuid)
+	if err != nil {
+		respondWithError(w, 404, "feed not found")
+		return
+	}
+
+	createParams := database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		CreatedAt: time.Now(),
+		UserID:    user.ID,
+		FeedID:    feed.ID,
+	}
+	follow, err := a.DB.CreateFeedFollow(r.Context(), createParams)
+	if err != nil {
+		log.Printf("follow creation error: %v\n", err)
+		respondWithError(w, 500, "error creating feed follow")
+		return
+	}
+
+	resp := followResponse{
+		Id:        follow.ID.String(),
+		CreatedAt: follow.CreatedAt,
+		FeedId:    follow.FeedID.String(),
+		UserId:    follow.UserID.String(),
+	}
+	respondWithJSON(w, 201, resp)
+}
+
+func (a *apiConfig) handlerDeleteFeedFollow(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(middleware.AuthUser).(database.User)
+	followId, err := uuid.Parse(r.PathValue("feedFollowID"))
+	if err != nil {
+		respondWithError(w, 400, "invalid feed id")
+		return
+	}
+
+	follow, err := a.DB.GetFeedFollow(r.Context(), followId)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		respondWithError(w, 500, "error retrieving feed follow")
+		return
+	}
+	if follow.UserID != user.ID {
+		respondWithError(w, 403, "operation not allowed")
+		return
+	}
+
+	if err := a.DB.DeleteFeedFollow(r.Context(), followId); err != nil {
+		respondWithError(w, 500, "error deleting feed follow")
+		return
+	}
+
+	respondWithJSON(w, 204, struct{}{})
+}
+
+func (a *apiConfig) handlerListUserFeedFollows(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(middleware.AuthUser).(database.User)
+
+	follows, err := a.DB.ListUserFeedFollows(r.Context(), user.ID)
+	if err != nil {
+		respondWithError(w, 500, "error retrieving feed follows")
+		return
+	}
+
+	respFollows := make([]followResponse, 0, len(follows))
+	for _, o := range follows {
+		respFollows = append(respFollows, followResponse{
+			Id:        o.ID.String(),
+			CreatedAt: o.CreatedAt,
+			FeedId:    o.FeedID.String(),
+			UserId:    o.UserID.String(),
+		})
+	}
+	respondWithJSON(w, 200, respFollows)
 }

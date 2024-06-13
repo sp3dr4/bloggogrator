@@ -1,4 +1,4 @@
-.DEFAULT_GOAL := help                                                                                                                                    
+.DEFAULT_GOAL := help
 SHELL = bash
 
 ## help: print this help message
@@ -44,7 +44,7 @@ test/cover:
 ## psql: opens the psql cli
 .PHONY: psql
 psql:
-	sudo docker compose exec pg psql -U admin -d test_db
+	docker compose exec pg psql -U admin -d test_db
 
 .PHONY: _migrate
 _migrate:

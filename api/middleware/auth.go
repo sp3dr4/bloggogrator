@@ -8,29 +8,39 @@ import (
 
 type MiddlewareContextKey string
 
-const AuthApiKey MiddlewareContextKey = "middleware.auth.apiKey"
+const AuthUser MiddlewareContextKey = "middleware.auth.user"
 
 func writeUnauthed(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusUnauthorized)
 	w.Write([]byte(http.StatusText(http.StatusUnauthorized)))
 }
 
-func Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authorization := r.Header.Get("Authorization")
+type UserFetcher func(ctx context.Context, apikey string) (interface{}, error)
 
-		if !strings.HasPrefix(authorization, "ApiKey ") {
-			writeUnauthed(w)
-			return
-		}
+func AuthFactory(fetchUser UserFetcher) Middleware {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorization := r.Header.Get("Authorization")
 
-		key := strings.TrimPrefix(authorization, "ApiKey ")
-		if len(strings.TrimSpace(key)) < 1 {
-			writeUnauthed(w)
-			return
-		}
+			if !strings.HasPrefix(authorization, "ApiKey ") {
+				writeUnauthed(w)
+				return
+			}
 
-		ctx := context.WithValue(r.Context(), AuthApiKey, key)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+			key := strings.TrimPrefix(authorization, "ApiKey ")
+			if len(strings.TrimSpace(key)) < 1 {
+				writeUnauthed(w)
+				return
+			}
+
+			user, err := fetchUser(r.Context(), key)
+			if err != nil {
+				writeUnauthed(w)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), AuthUser, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }

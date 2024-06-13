@@ -3,9 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -90,16 +88,13 @@ func TestCreateUserHandler(t *testing.T) {
 	})
 }
 
-func setupGetUserTest(t *testing.T, mockDbApi *MockedDbApi, user database.User, err error) (*httptest.ResponseRecorder, *http.Request, apiConfig) {
+func setupGetUserTest(t *testing.T, mockDbApi *MockedDbApi, user database.User) (*httptest.ResponseRecorder, *http.Request, apiConfig) {
 	t.Helper()
 	testApi := apiConfig{DB: mockDbApi}
-	mockDbApi.On("GetUserByApiKey", mock.Anything, mock.Anything).Return(user, err)
 
 	req, err := http.NewRequest(http.MethodGet, "/v1/users", nil)
 	require.NoError(t, err)
-	key := "anything"
-	req.Header.Set("Authorization", fmt.Sprintf("ApiKey %s", key))
-	ctx := context.WithValue(req.Context(), middleware.AuthApiKey, key)
+	ctx := context.WithValue(req.Context(), middleware.AuthUser, user)
 	rw := httptest.NewRecorder()
 
 	return rw, req.WithContext(ctx), testApi
@@ -109,7 +104,7 @@ func TestGetUserHandler(t *testing.T) {
 	t.Run("return 200", func(t *testing.T) {
 		mockDbApi := new(MockedDbApi)
 		user := setupUser()
-		rw, req, testApi := setupGetUserTest(t, mockDbApi, user, nil)
+		rw, req, testApi := setupGetUserTest(t, mockDbApi, user)
 
 		testApi.handlerGetUser(rw, req)
 
@@ -122,27 +117,6 @@ func TestGetUserHandler(t *testing.T) {
 		mockDbApi.AssertExpectations(t)
 	})
 
-	t.Run("return 404", func(t *testing.T) {
-		mockDbApi := new(MockedDbApi)
-		rw, req, testApi := setupGetUserTest(t, mockDbApi, database.User{}, sql.ErrNoRows)
-
-		testApi.handlerGetUser(rw, req)
-
-		compareError(t, rw, http.StatusNotFound, "user not found")
-
-		mockDbApi.AssertExpectations(t)
-	})
-
-	t.Run("return 500", func(t *testing.T) {
-		mockDbApi := new(MockedDbApi)
-		rw, req, testApi := setupGetUserTest(t, mockDbApi, database.User{}, context.DeadlineExceeded)
-
-		testApi.handlerGetUser(rw, req)
-
-		compareError(t, rw, http.StatusInternalServerError, "something went wrong")
-
-		mockDbApi.AssertExpectations(t)
-	})
 }
 
 func setupFeed() database.Feed {
@@ -169,15 +143,13 @@ func compareFeed(t *testing.T, expected database.Feed, actual feedResponse) {
 func setupCreateFeedTest(t *testing.T, mockDbApi *MockedDbApi, user database.User, feed database.Feed, err error) (*httptest.ResponseRecorder, *http.Request, apiConfig) {
 	t.Helper()
 	testApi := apiConfig{DB: mockDbApi}
-	mockDbApi.On("GetUserByApiKey", mock.Anything, mock.Anything).Return(user, nil)
 	mockDbApi.On("CreateFeed", mock.Anything, mock.Anything).Return(feed, err)
 
 	body, err := json.Marshal(map[string]string{"name": "TestFeed", "url": "http://example.com"})
 	require.NoError(t, err)
 	req, err := http.NewRequest("POST", "/feed", bytes.NewBuffer(body))
 	require.NoError(t, err)
-	req.Header.Set("Authorization", fmt.Sprintf("ApiKey %s", user.ApiKey))
-	ctx := context.WithValue(req.Context(), middleware.AuthApiKey, user.ApiKey)
+	ctx := context.WithValue(req.Context(), middleware.AuthUser, user)
 	rw := httptest.NewRecorder()
 
 	return rw, req.WithContext(ctx), testApi
@@ -203,14 +175,11 @@ func TestCreateFeedHandler(t *testing.T) {
 
 	t.Run("return 400", func(t *testing.T) {
 		mockDbApi := new(MockedDbApi)
-		user := setupUser()
-		mockDbApi.On("GetUserByApiKey", mock.Anything, mock.Anything).Return(user, nil)
 		testApi := apiConfig{DB: mockDbApi}
 		rw := httptest.NewRecorder()
 		req, err := http.NewRequest("POST", "/feed", bytes.NewBufferString(`{invalid json}`))
 		require.NoError(t, err)
-		req.Header.Set("Authorization", fmt.Sprintf("ApiKey %s", user.ApiKey))
-		ctx := context.WithValue(req.Context(), middleware.AuthApiKey, user.ApiKey)
+		ctx := context.WithValue(req.Context(), middleware.AuthUser, setupUser())
 
 		testApi.handlerCreateFeed(rw, req.WithContext(ctx))
 

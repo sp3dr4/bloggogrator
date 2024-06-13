@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/sp3dr4/bloggogrator/api/middleware"
@@ -20,6 +21,11 @@ type DbApi interface {
 	GetUserByApiKey(context.Context, string) (database.User, error)
 	CreateFeed(context.Context, database.CreateFeedParams) (database.Feed, error)
 	ListFeeds(context.Context) ([]database.Feed, error)
+	GetFeed(context.Context, uuid.UUID) (database.Feed, error)
+	CreateFeedFollow(context.Context, database.CreateFeedFollowParams) (database.FeedFollow, error)
+	GetFeedFollow(context.Context, uuid.UUID) (database.FeedFollow, error)
+	ListUserFeedFollows(context.Context, uuid.UUID) ([]database.FeedFollow, error)
+	DeleteFeedFollow(context.Context, uuid.UUID) error
 }
 
 type apiConfig struct {
@@ -72,6 +78,14 @@ func Run() {
 		DB: dbQueries,
 	}
 
+	userFetcher := func(ctx context.Context, apiKey string) (interface{}, error) {
+		user, err := dbQueries.GetUserByApiKey(ctx, apiKey)
+		if err != nil {
+			return nil, err
+		}
+		return user, nil
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/healthz", cfg.handlerHealth)
 	mux.HandleFunc("GET /v1/err", cfg.handlerErr)
@@ -81,7 +95,10 @@ func Run() {
 	protectedMux := http.NewServeMux()
 	protectedMux.HandleFunc("GET /users", cfg.handlerGetUser)
 	protectedMux.HandleFunc("POST /feeds", cfg.handlerCreateFeed)
-	protectedStack := middleware.CreateStack(middleware.Logging, middleware.Auth)(protectedMux)
+	protectedMux.HandleFunc("POST /feed_follows", cfg.handlerCreateFeedFollow)
+	protectedMux.HandleFunc("GET /feed_follows", cfg.handlerListUserFeedFollows)
+	protectedMux.HandleFunc("DELETE /feed_follows/{feedFollowID}", cfg.handlerDeleteFeedFollow)
+	protectedStack := middleware.CreateStack(middleware.AuthFactory(userFetcher))(protectedMux)
 	mux.Handle("/v1/", http.StripPrefix("/v1", protectedStack))
 
 	server := &http.Server{
