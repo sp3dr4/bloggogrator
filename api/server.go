@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,7 +9,6 @@ import (
 	"os"
 
 	"github.com/google/uuid"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/sp3dr4/bloggogrator/api/middleware"
 	"github.com/sp3dr4/bloggogrator/internal/database"
@@ -63,29 +61,13 @@ func (a *apiConfig) handlerErr(w http.ResponseWriter, r *http.Request) {
 	respondWithError(w, 500, "Internal Server Error")
 }
 
-func Run() {
-	godotenv.Load()
-	dbURL := os.Getenv("CONN")
-	db, err := sql.Open("postgres", dbURL)
-	if err != nil {
-		log.Fatalf("connection open error: %v", err)
-	}
-	if err := db.Ping(); err != nil {
-		log.Fatalf("connection ping error: %v", err)
-	}
-
-	dbQueries := database.New(db)
-
+func Run(db DbApi) {
 	cfg := apiConfig{
-		DB: dbQueries,
+		DB: db,
 	}
 
 	userFetcher := func(ctx context.Context, apiKey string) (interface{}, error) {
-		user, err := dbQueries.GetUserByApiKey(ctx, apiKey)
-		if err != nil {
-			return nil, err
-		}
-		return user, nil
+		return cfg.DB.GetUserByApiKey(ctx, apiKey)
 	}
 
 	mux := http.NewServeMux()

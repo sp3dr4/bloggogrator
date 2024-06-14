@@ -67,3 +67,13 @@ func (m *MockedDbApi) DeleteFeedFollow(ctx context.Context, id uuid.UUID) error 
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
+
+func (m *MockedDbApi) GetNextFeedsToFetch(ctx context.Context, n int32) ([]database.Feed, error) {
+	args := m.Called(ctx, n)
+	return args.Get(0).([]database.Feed), args.Error(1)
+}
+
+func (m *MockedDbApi) MarkFeedFetched(ctx context.Context, arg database.MarkFeedFetchedParams) (database.Feed, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(database.Feed), args.Error(1)
+}
