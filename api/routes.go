@@ -21,13 +21,40 @@ type userResponse struct {
 	ApiKey    string    `json:"api_key"`
 }
 
+func dbUserToUser(o database.User) userResponse {
+	return userResponse{
+		Id:        o.ID.String(),
+		CreatedAt: o.CreatedAt,
+		UpdatedAt: o.UpdatedAt,
+		Name:      o.Name,
+		ApiKey:    o.ApiKey,
+	}
+}
+
 type feedResponse struct {
-	Id        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Name      string    `json:"name"`
-	Url       string    `json:"url"`
-	UserId    string    `json:"user_id"`
+	Id            string     `json:"id"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	Name          string     `json:"name"`
+	Url           string     `json:"url"`
+	LastFetchedAt *time.Time `json:"last_fetched_at"`
+	UserId        string     `json:"user_id"`
+}
+
+func dbFeedToFeed(o database.Feed) feedResponse {
+	var fetchedAt *time.Time
+	if o.LastFetchedAt.Valid {
+		fetchedAt = &o.LastFetchedAt.Time
+	}
+	return feedResponse{
+		Id:            o.ID.String(),
+		CreatedAt:     o.CreatedAt,
+		UpdatedAt:     o.UpdatedAt,
+		Name:          o.Name,
+		Url:           o.Url,
+		LastFetchedAt: fetchedAt,
+		UserId:        o.UserID.String(),
+	}
 }
 
 type followResponse struct {
@@ -35,6 +62,15 @@ type followResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 	FeedId    string    `json:"feed_id"`
 	UserId    string    `json:"user_id"`
+}
+
+func dbFollowToFollow(o database.FeedFollow) followResponse {
+	return followResponse{
+		Id:        o.ID.String(),
+		CreatedAt: o.CreatedAt,
+		UserId:    o.UserID.String(),
+		FeedId:    o.FeedID.String(),
+	}
 }
 
 func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
@@ -59,27 +95,13 @@ func (a *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := userResponse{
-		Id:        user.ID.String(),
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Name:      user.Name,
-		ApiKey:    user.ApiKey,
-	}
-	respondWithJSON(w, 201, resp)
+	respondWithJSON(w, 201, dbUserToUser(user))
 }
 
 func (a *apiConfig) handlerGetUser(w http.ResponseWriter, r *http.Request) {
 	user := r.Context().Value(middleware.AuthUser).(database.User)
 
-	resp := userResponse{
-		Id:        user.ID.String(),
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-		Name:      user.Name,
-		ApiKey:    user.ApiKey,
-	}
-	respondWithJSON(w, 200, resp)
+	respondWithJSON(w, 200, dbUserToUser(user))
 }
 
 func (a *apiConfig) handlerListFeeds(w http.ResponseWriter, r *http.Request) {
@@ -91,14 +113,7 @@ func (a *apiConfig) handlerListFeeds(w http.ResponseWriter, r *http.Request) {
 	}
 	respFeeds := make([]feedResponse, 0, len(feeds))
 	for _, o := range feeds {
-		respFeeds = append(respFeeds, feedResponse{
-			Id:        o.ID.String(),
-			CreatedAt: o.CreatedAt,
-			UpdatedAt: o.UpdatedAt,
-			Name:      o.Name,
-			Url:       o.Url,
-			UserId:    o.UserID.String(),
-		})
+		respFeeds = append(respFeeds, dbFeedToFeed(o))
 	}
 	respondWithJSON(w, 200, respFeeds)
 }
@@ -143,26 +158,12 @@ func (a *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feedResp := feedResponse{
-		Id:        feed.ID.String(),
-		CreatedAt: feed.CreatedAt,
-		UpdatedAt: feed.UpdatedAt,
-		Name:      feed.Name,
-		Url:       feed.Url,
-		UserId:    feed.UserID.String(),
-	}
-	followResp := followResponse{
-		Id:        follow.ID.String(),
-		CreatedAt: follow.CreatedAt,
-		UserId:    follow.UserID.String(),
-		FeedId:    follow.FeedID.String(),
-	}
 	resp := struct {
 		Feed       feedResponse   `json:"feed"`
 		FeedFollow followResponse `json:"feed_follow"`
 	}{
-		Feed:       feedResp,
-		FeedFollow: followResp,
+		Feed:       dbFeedToFeed(feed),
+		FeedFollow: dbFollowToFollow(follow),
 	}
 	respondWithJSON(w, 201, resp)
 }
@@ -202,13 +203,7 @@ func (a *apiConfig) handlerCreateFeedFollow(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	resp := followResponse{
-		Id:        follow.ID.String(),
-		CreatedAt: follow.CreatedAt,
-		FeedId:    follow.FeedID.String(),
-		UserId:    follow.UserID.String(),
-	}
-	respondWithJSON(w, 201, resp)
+	respondWithJSON(w, 201, dbFollowToFollow(follow))
 }
 
 func (a *apiConfig) handlerDeleteFeedFollow(w http.ResponseWriter, r *http.Request) {
@@ -248,12 +243,7 @@ func (a *apiConfig) handlerListUserFeedFollows(w http.ResponseWriter, r *http.Re
 
 	respFollows := make([]followResponse, 0, len(follows))
 	for _, o := range follows {
-		respFollows = append(respFollows, followResponse{
-			Id:        o.ID.String(),
-			CreatedAt: o.CreatedAt,
-			FeedId:    o.FeedID.String(),
-			UserId:    o.UserID.String(),
-		})
+		respFollows = append(respFollows, dbFollowToFollow(o))
 	}
 	respondWithJSON(w, 200, respFollows)
 }

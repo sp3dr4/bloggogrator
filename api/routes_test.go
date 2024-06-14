@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -121,12 +122,22 @@ func TestGetUserHandler(t *testing.T) {
 
 func setupFeed() database.Feed {
 	return database.Feed{
+		ID:            uuid.New(),
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		Name:          "TestFeed",
+		Url:           "http://example.com",
+		LastFetchedAt: sql.NullTime{},
+		UserID:        uuid.New(),
+	}
+}
+
+func setupFollow(userId, feedId uuid.UUID) database.FeedFollow {
+	return database.FeedFollow{
 		ID:        uuid.New(),
 		CreatedAt: now,
-		UpdatedAt: now,
-		Name:      "TestFeed",
-		Url:       "http://example.com",
-		UserID:    uuid.New(),
+		UserID:    userId,
+		FeedID:    feedId,
 	}
 }
 
@@ -140,10 +151,13 @@ func compareFeed(t *testing.T, expected database.Feed, actual feedResponse) {
 	require.Equal(t, expected.UserID.String(), actual.UserId)
 }
 
-func setupCreateFeedTest(t *testing.T, mockDbApi *MockedDbApi, user database.User, feed database.Feed, err error) (*httptest.ResponseRecorder, *http.Request, apiConfig) {
+func setupCreateFeedTest(t *testing.T, mockDbApi *MockedDbApi, user database.User, feed database.Feed, follow database.FeedFollow, err error) (*httptest.ResponseRecorder, *http.Request, apiConfig) {
 	t.Helper()
 	testApi := apiConfig{DB: mockDbApi}
 	mockDbApi.On("CreateFeed", mock.Anything, mock.Anything).Return(feed, err)
+	if err == nil {
+		mockDbApi.On("CreateFeedFollow", mock.Anything, mock.Anything).Return(follow, err)
+	}
 
 	body, err := json.Marshal(map[string]string{"name": "TestFeed", "url": "http://example.com"})
 	require.NoError(t, err)
@@ -160,15 +174,19 @@ func TestCreateFeedHandler(t *testing.T) {
 		mockDbApi := new(MockedDbApi)
 		user := setupUser()
 		feed := setupFeed()
-		rw, req, testApi := setupCreateFeedTest(t, mockDbApi, user, feed, nil)
+		follow := setupFollow(user.ID, feed.ID)
+		rw, req, testApi := setupCreateFeedTest(t, mockDbApi, user, feed, follow, nil)
 
 		testApi.handlerCreateFeed(rw, req)
 
 		require.Equal(t, http.StatusCreated, rw.Code)
-		var resp feedResponse
+		var resp struct {
+			Feed       feedResponse   `json:"feed"`
+			FeedFollow followResponse `json:"feed_follow"`
+		}
 		err := json.NewDecoder(rw.Body).Decode(&resp)
 		require.NoError(t, err)
-		compareFeed(t, feed, resp)
+		compareFeed(t, feed, resp.Feed)
 
 		mockDbApi.AssertExpectations(t)
 	})
@@ -191,7 +209,7 @@ func TestCreateFeedHandler(t *testing.T) {
 	t.Run("return 500", func(t *testing.T) {
 		mockDbApi := new(MockedDbApi)
 		user := setupUser()
-		rw, req, testApi := setupCreateFeedTest(t, mockDbApi, user, database.Feed{}, context.DeadlineExceeded)
+		rw, req, testApi := setupCreateFeedTest(t, mockDbApi, user, database.Feed{}, database.FeedFollow{}, context.DeadlineExceeded)
 
 		testApi.handlerCreateFeed(rw, req)
 
