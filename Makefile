@@ -35,9 +35,9 @@ audit:
 test:
 	go test -v -race -buildvcs ./...
 
-## test/cover: run all tests and display coverage
-.PHONY: test/cover
-test/cover:
+## test-cover: run all tests and display coverage
+.PHONY: test-cover
+test-cover:
 	go test -v -race -buildvcs -coverprofile=/tmp/coverage.out ./...
 	go tool cover -html=/tmp/coverage.out
 
@@ -50,18 +50,23 @@ psql:
 _migrate:
 	goose -v -dir ./sql/schema postgres "postgres://admin:admin@localhost:5432/test_db" ${COMMAND}
 
-## migrate/status: shows the migrations status
-.PHONY: migrate/status
-migrate/status:
+## migrate-status: shows the migrations status
+.PHONY: migrate-status
+migrate-status:
 	@$(MAKE) _migrate COMMAND="status"
 
-## migrate/up: applies all the migrations
-.PHONY: migrate/up
-migrate/up:
+## migrate-up: applies all the migrations
+.PHONY: migrate-up
+migrate-up:
 	@$(MAKE) _migrate COMMAND="up"
 
-## sqlc/gen: generates code from sql files
-.PHONY: sqlc/gen
-sqlc/gen:
+## migrate-reset: undoes all the migrations
+.PHONY: migrate-reset
+migrate-reset:
+	@$(MAKE) _migrate COMMAND="reset"
+
+## sqlc-gen: generates code from sql files
+.PHONY: sqlc-gen
+sqlc-gen:
 	@sqlc generate
 	@echo "done"
