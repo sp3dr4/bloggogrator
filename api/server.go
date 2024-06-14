@@ -26,6 +26,7 @@ type DbApi interface {
 	GetFeedFollow(context.Context, uuid.UUID) (database.FeedFollow, error)
 	ListUserFeedFollows(context.Context, uuid.UUID) ([]database.FeedFollow, error)
 	DeleteFeedFollow(context.Context, uuid.UUID) error
+	GetNextFeedsToFetch(context.Context, int32) ([]database.Feed, error)
 }
 
 type apiConfig struct {
