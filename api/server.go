@@ -26,6 +26,7 @@ type DbApi interface {
 	DeleteFeedFollow(context.Context, uuid.UUID) error
 	GetNextFeedsToFetch(context.Context, int32) ([]database.Feed, error)
 	MarkFeedFetched(context.Context, database.MarkFeedFetchedParams) (database.Feed, error)
+	GetUserPosts(context.Context, database.GetUserPostsParams) ([]database.Post, error)
 }
 
 type apiConfig struct {
@@ -82,6 +83,7 @@ func Run(db DbApi) {
 	protectedMux.HandleFunc("POST /feed_follows", cfg.handlerCreateFeedFollow)
 	protectedMux.HandleFunc("GET /feed_follows", cfg.handlerListUserFeedFollows)
 	protectedMux.HandleFunc("DELETE /feed_follows/{feedFollowID}", cfg.handlerDeleteFeedFollow)
+	protectedMux.HandleFunc("GET /posts", cfg.handlerListPosts)
 	protectedStack := middleware.CreateStack(middleware.AuthFactory(userFetcher))(protectedMux)
 	mux.Handle("/v1/", http.StripPrefix("/v1", protectedStack))
 

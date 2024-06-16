@@ -77,3 +77,8 @@ func (m *MockedDbApi) MarkFeedFetched(ctx context.Context, arg database.MarkFeed
 	args := m.Called(ctx, arg)
 	return args.Get(0).(database.Feed), args.Error(1)
 }
+
+func (m *MockedDbApi) GetUserPosts(ctx context.Context, arg database.GetUserPostsParams) ([]database.Post, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).([]database.Post), args.Error(1)
+}
