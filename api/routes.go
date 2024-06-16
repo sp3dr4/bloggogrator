@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -70,6 +71,38 @@ func dbFollowToFollow(o database.FeedFollow) followResponse {
 		CreatedAt: o.CreatedAt,
 		UserId:    o.UserID.String(),
 		FeedId:    o.FeedID.String(),
+	}
+}
+
+type postResponse struct {
+	Id          string    `json:"id"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	Url         string    `json:"url"`
+	Title       *string   `json:"title"`
+	Description *string   `json:"description"`
+	PublishedAt time.Time `json:"published_at"`
+	FeedId      string    `json:"feed_id"`
+}
+
+func dbPostToPost(o database.Post) postResponse {
+	var title *string
+	if o.Title.Valid {
+		title = &o.Title.String
+	}
+	var descr *string
+	if o.Description.Valid {
+		descr = &o.Description.String
+	}
+	return postResponse{
+		Id:          o.ID.String(),
+		CreatedAt:   o.CreatedAt,
+		UpdatedAt:   o.UpdatedAt,
+		Url:         o.Url,
+		Title:       title,
+		Description: descr,
+		PublishedAt: o.PublishedAt,
+		FeedId:      o.FeedID.String(),
 	}
 }
 
@@ -246,4 +279,31 @@ func (a *apiConfig) handlerListUserFeedFollows(w http.ResponseWriter, r *http.Re
 		respFollows = append(respFollows, dbFollowToFollow(o))
 	}
 	respondWithJSON(w, 200, respFollows)
+}
+
+func (a *apiConfig) handlerListPosts(w http.ResponseWriter, r *http.Request) {
+	user := r.Context().Value(middleware.AuthUser).(database.User)
+
+	var limit int32 = 20
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		limitInt, err := strconv.ParseInt(limitStr, 10, 32)
+		if err != nil {
+			respondWithError(w, 400, "invalid limit query parameter")
+			return
+		}
+		limit = int32(limitInt)
+	}
+
+	params := database.GetUserPostsParams{UserID: user.ID, Limit: limit}
+	posts, err := a.DB.GetUserPosts(r.Context(), params)
+	if err != nil {
+		respondWithError(w, 500, "error retrieving user posts")
+		return
+	}
+
+	respPosts := make([]postResponse, 0, len(posts))
+	for _, o := range posts {
+		respPosts = append(respPosts, dbPostToPost(o))
+	}
+	respondWithJSON(w, 200, respPosts)
 }
