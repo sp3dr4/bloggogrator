@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"github.com/sp3dr4/bloggogrator/api"
 	"github.com/sp3dr4/bloggogrator/internal/database"
 	"github.com/sp3dr4/bloggogrator/internal/rss"
@@ -54,11 +54,35 @@ func main() {
 		feedsFetcher := func() ([]database.Feed, error) {
 			return dbQueries.GetNextFeedsToFetch(context.Background(), int32(pollAmount))
 		}
-		feedMarker := func(id uuid.UUID, when time.Time) {
+
+		feedMarker := func(id uuid.UUID, when time.Time) (database.Feed, error) {
 			params := database.MarkFeedFetchedParams{ID: id, LastFetchedAt: sql.NullTime{Time: when, Valid: true}}
-			dbQueries.MarkFeedFetched(context.Background(), params)
+			return dbQueries.MarkFeedFetched(context.Background(), params)
 		}
-		go rss.Run(time.Duration(pollFrequencySec)*time.Second, feedsFetcher, feedMarker)
+
+		postSaver := func(url, title, description string, publishedAt time.Time, feedId uuid.UUID) (*database.Post, error) {
+			params := database.CreatePostParams{
+				ID:          uuid.New(),
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+				Url:         url,
+				Title:       sql.NullString{String: title, Valid: title != ""},
+				Description: sql.NullString{String: description, Valid: description != ""},
+				PublishedAt: publishedAt,
+				FeedID:      feedId,
+			}
+			p, err := dbQueries.CreatePost(context.Background(), params)
+			if err != nil {
+				pqErr, ok := err.(*pq.Error)
+				if ok && pqErr.Code.Name() == "unique_violation" {
+					return nil, nil
+				}
+				return nil, err
+			}
+			return &p, nil
+		}
+
+		go rss.Run(time.Duration(pollFrequencySec)*time.Second, feedsFetcher, feedMarker, postSaver)
 	}
 
 	api.Run(dbQueries)
